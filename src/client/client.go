@@ -45,6 +45,7 @@ type User struct {
 
 func NewPostBuilder(user *User, content string) Post{
 	return Post{
+		id: 0,
 		Author: user,
 		Content: content,
 		NumOfLikes:  0,
@@ -73,31 +74,36 @@ func HandleFeed(pageNum int) (string, error) {
 // "POST"
 //Upon creation of a new post, create a new recordbuilder and the record itself and append into the "post" cluster
 func HandlePost(proj lib.Project, col lib.Collection, p Post)  error {
-	newPost := sdk.NewClusterBuilder(&proj, &col, create_post_name(&col))
-	sdk.CreateCluster(newPost)
+	newPost := sdk.NewClusterBuilder(&col, create_post_name(&col))
+	sdk.CreateCluster(newPost) //Each new Post by a user is its own Cluster within an OstrichDB Collection
 	var record *lib.Record
 	for _ , postName:= range postNames{
 		switch(postName){
 			case "author":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, STR, p.Author.Handle)
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING], p.Author.Handle)
 				break
 			case "content":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, STR, p.Content)
+				// fmt.Println("making a post with the following content: ", p.Content)
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING],  p.Content)
 				break
 			case "numOfLikes":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, INT, "0")
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.INTEGER], "0")
 				break
 			case "numOfComments":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, INT, "0")
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.INTEGER], "0")
 				break
 			case "whoLikedPost":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, STR_ARR, fmt.Sprintf("%v", p.WhoLikedPost))
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING_ARRAY], fmt.Sprintf("%v", p.WhoLikedPost))
 				break
 			case "whoCommented":
-				record = sdk.NewRecordBuilder(&proj, &col, newPost, postName, STR_ARR, fmt.Sprintf("%v", p.WhoCommented))
+				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING_ARRAY], fmt.Sprintf("%v", p.WhoCommented))
 		}
 
-		sdk.CreateRecord(record)
+
+		err:= sdk.CreateRecord(record)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
