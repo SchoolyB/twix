@@ -33,6 +33,68 @@ type Post struct {
 	Comments []Post
 }
 
+// OstrichDB cluster response structure
+type ClusterResponse struct {
+	ClusterName  string         `json:"cluster_name"`
+	ClusterID    int            `json:"cluster_id"`
+	RecordCount  int            `json:"record_count"`
+	Records      []RecordField  `json:"records"`
+}
+
+type RecordField struct {
+	Name  string      `json:"name"`
+	Type  string      `json:"type"`
+	Value interface{} `json:"value"`
+}
+
+// Helper method to convert ClusterResponse to Post
+func (cr *ClusterResponse) ToPost() (*Post, error) {
+	post := &Post{
+		id: uint64(cr.ClusterID),
+	}
+
+	// Parse records into Post fields
+	for _, record := range cr.Records {
+		switch record.Name {
+		case "author":
+			if authorStr, ok := record.Value.(string); ok {
+				post.Author = &User{Handle: authorStr}
+			}
+		case "content":
+			if content, ok := record.Value.(string); ok {
+				post.Content = content
+			}
+		case "numOfLikes":
+			if likes, ok := record.Value.(uint64); ok {
+				post.NumOfLikes = uint64(likes)
+			}
+		case "numOfComments":
+			if comments, ok := record.Value.(uint64); ok {
+				post.NumOfComments = uint64(comments)
+			}
+		case "whoLikedPost":
+			if arr, ok := record.Value.([]interface{}); ok {
+				post.WhoLikedPost = make([]string, len(arr))
+				for i, v := range arr {
+					if str, ok := v.(string); ok {
+						post.WhoLikedPost[i] = str
+					}
+				}
+			}
+		case "whoCommented":
+			if arr, ok := record.Value.([]interface{}); ok {
+				post.WhoCommented = make([]string, len(arr))
+				for i, v := range arr {
+					if str, ok := v.(string); ok {
+						post.WhoCommented[i] = str
+					}
+				}
+			}
+		}
+	}
+
+	return post, nil
+}
 
 var postNames = []string {"author","content","numOfLikes","numOfComments","whoLikedPost","whoCommented"}
 
@@ -40,6 +102,7 @@ type User struct {
 	Handle string
 	Following []string
 	Followers []string
+	Posts []Post
 	//can add more here if needed
 }
 
@@ -71,10 +134,9 @@ func HandleFeed(pageNum int) (string, error) {
 	return bufio.NewReader(conn).ReadString('\n')
 }
 
-// "POST"
-//Upon creation of a new post, create a new recordbuilder and the record itself and append into the "post" cluster
-func HandlePost(proj lib.Project, col lib.Collection, p Post)  error {
-	newPost := sdk.NewClusterBuilder(&col, create_post_name(&col))
+//Creates a new Post (p) in a Collection (c).  Upon creation each Post is stored as a Cluster within an OstrichDB Collection
+func HandlePost(c lib.Collection, p Post)  error {
+	newPost := sdk.NewClusterBuilder(&c, create_post_name(&c))
 	sdk.CreateCluster(newPost) //Each new Post by a user is its own Cluster within an OstrichDB Collection
 	var record *lib.Record
 	for _ , postName:= range postNames{
@@ -99,7 +161,6 @@ func HandlePost(proj lib.Project, col lib.Collection, p Post)  error {
 				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING_ARRAY], fmt.Sprintf("%v", p.WhoCommented))
 		}
 
-
 		err:= sdk.CreateRecord(record)
 		if err != nil {
 			return err
@@ -109,13 +170,12 @@ func HandlePost(proj lib.Project, col lib.Collection, p Post)  error {
 	return nil
 }
 
-// "FETCH"
-func HandleFetch(post string) (string, error) {
-	conn, _ := net.Dial("tcp", "localhost:8080")
-	defer conn.Close()
-	fmt.Fprintf(conn, "FETCH %v\n", post)
-	return bufio.NewReader(conn).ReadString('\n')
-}
+//Fetches a specific Post (p) from a Collection (c)
+// The Collection is based on the Author (a) that created the Post
+// func HandleFetch(p Post, c *lib.Collection,a *User) (string, error) {
+// 	// post:=
+
+// }
 
 // "COMMENT"
 func HandleComment(post, content string) (string, error) {
@@ -197,8 +257,6 @@ func Run() {
 	}
 }
 
-
-
 func parsePostId(id_s string) *Post {
 	ids := strings.Split(id_s, "-")
 	id, err := strconv.Atoi(ids[0])
@@ -246,6 +304,7 @@ func parseCommand(command string) (string, bool) {
 		posts = append(posts, newPost)
 		res = fmt.Sprintf("%v", newPost)
 
+
 		break
 	// example: FEED <page count>
 	case "FEED":
@@ -276,7 +335,6 @@ func parseCommand(command string) (string, bool) {
 			fmt.Println("Could not parse ", words[1])
 			return "", false
 		}
-		fmt.Println(post)
 		comment := Post{id: uint64(len(post.Comments)), Content: msg}
 		post.Comments = append(post.Comments, comment)
 		res = "Comment posted successfully..."
