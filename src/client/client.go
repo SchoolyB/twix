@@ -30,7 +30,7 @@ type Post struct {
 	NumOfComments uint64
 	WhoLikedPost []string
 	WhoCommented []string
-	Comments []Post
+	Comments []string
 }
 
 // OstrichDB cluster response structure
@@ -90,13 +90,22 @@ func (cr *ClusterResponse) ToPost() (*Post, error) {
 					}
 				}
 			}
+		case "comments":
+			if arr, ok := record.Value.([]interface{}); ok{
+				post.Comments = make([]string, len(arr))
+				for i, v:= range arr {
+					if str, ok:= v.(string); ok{
+						post.Comments[i] = str
+					}
+				}
+			}
 		}
 	}
 
 	return post, nil
 }
 
-var postNames = []string {"author","content","numOfLikes","numOfComments","whoLikedPost","whoCommented"}
+var postRecordNames = []string {"author","content","numOfLikes","numOfComments","whoLikedPost","whoCommented", "comments"}
 
 type User struct {
 	Handle string
@@ -115,6 +124,7 @@ func NewPostBuilder(user *User, content string) Post{
 		NumOfComments:  0,
 		WhoLikedPost: nil,
 		WhoCommented: nil,
+
 	}
 }
 
@@ -134,31 +144,31 @@ func HandleFeed(pageNum int) (string, error) {
 	return bufio.NewReader(conn).ReadString('\n')
 }
 
-//Creates a new Post (p) in a Collection (c).  Upon creation each Post is stored as a Cluster within an OstrichDB Collection
+//Creates a new Post (p) in a Collection (c)
+//Upon creation each Post is stored as a Cluster within an OstrichDB Collection
 func HandlePost(c lib.Collection, p Post)  error {
 	newPost := sdk.NewClusterBuilder(&c, create_post_name(&c))
-	sdk.CreateCluster(newPost) //Each new Post by a user is its own Cluster within an OstrichDB Collection
+	sdk.CreateCluster(newPost)
 	var record *lib.Record
-	for _ , postName:= range postNames{
+	for _ , postName:= range postRecordNames{
 		switch(postName){
 			case "author":
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING], p.Author.Handle)
+				record = sdk.NewRecordBuilder(newPost, postName, lib.STRING, p.Author.Handle)
 				break
 			case "content":
-				// fmt.Println("making a post with the following content: ", p.Content)
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING],  p.Content)
+				record = sdk.NewRecordBuilder(newPost, postName, lib.STRING,  p.Content)
 				break
 			case "numOfLikes":
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.INTEGER], "0")
+				record = sdk.NewRecordBuilder(newPost, postName, lib.INTEGER, "0")
 				break
 			case "numOfComments":
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.INTEGER], "0")
+				record = sdk.NewRecordBuilder(newPost, postName, lib.INTEGER, "0")
 				break
 			case "whoLikedPost":
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING_ARRAY], fmt.Sprintf("%v", p.WhoLikedPost))
+				record = sdk.NewRecordBuilder(newPost, postName, lib.STRING_ARRAY, fmt.Sprintf("%v", p.WhoLikedPost))
 				break
 			case "whoCommented":
-				record = sdk.NewRecordBuilder(newPost, postName, lib.RecordTypeStrings[lib.STRING_ARRAY], fmt.Sprintf("%v", p.WhoCommented))
+				record = sdk.NewRecordBuilder(newPost, postName, lib.STRING_ARRAY, fmt.Sprintf("%v", p.WhoCommented))
 		}
 
 		err:= sdk.CreateRecord(record)
@@ -170,24 +180,30 @@ func HandlePost(c lib.Collection, p Post)  error {
 	return nil
 }
 
-//Fetches a specific Post (p) from a Collection (c)
+// Fetches a specific Post (p) from a Collection (c)
 // The Collection is based on the Author (a) that created the Post
-// func HandleFetch(p Post, c *lib.Collection,a *User) (string, error) {
-// 	// post:=
+// func HandleFetch(p Post, c *lib.Collection,) (string, error) {
+// 	path:=
+// 	post:= lib.Get()
 
 // }
 
 // "COMMENT"
-func HandleComment(post, content string) (string, error) {
-	conn, _ := net.Dial("tcp", "localhost:8080")
-	defer conn.Close()
-	fmt.Fprintf(conn, "COMMENT %v %v\n", post, content)
-	return bufio.NewReader(conn).ReadString('\n')
-}
+// TODO: before working on commenets. Have to update OstrichDB src code
+// and ensuring there is a way to append a new value to a record that is an array
+// func HandleComment(post Post, comment string) (string, error) {
+// 	conn, _ := net.Dial("tcp", "localhost:8080")
+// 	defer conn.Close()
+// 	fmt.Fprintf(conn, "COMMENT %v %v\n", post, content)
+// 	return bufio.NewReader(conn).ReadString('\n')
+// }
 
 // "LIKE"
-func HandleLike(post string) (string, error) {
-	conn, _ := net.Dial("tcp", "localhost:8080")
+func HandleLike(col lib.Collection,clu lib.Cluster, post Post) (string, error) {
+
+	record := sdk.NewRecordBuilder(&clu, "numOfLikes", lib.INTEGER)
+
+	sdk.UpdateRecordValue()
 	defer conn.Close()
 	fmt.Fprintf(conn, "LIKE %v\n", post)
 	return bufio.NewReader(conn).ReadString('\n')
