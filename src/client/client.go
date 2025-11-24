@@ -30,7 +30,7 @@ type Post struct {
 	NumOfComments uint64
 	WhoLikedPost []string
 	WhoCommented []string
-	Comments []string
+	Comments []Post
 }
 
 // OstrichDB cluster response structure
@@ -92,10 +92,10 @@ func (cr *ClusterResponse) ToPost() (*Post, error) {
 			}
 		case "comments":
 			if arr, ok := record.Value.([]interface{}); ok{
-				post.Comments = make([]string, len(arr))
+				post.Comments = make([]Post, len(arr))
 				for i, v:= range arr {
-					if str, ok:= v.(string); ok{
-						post.Comments[i] = str
+					if p, ok:= v.(Post); ok{
+						post.Comments[i] = p
 					}
 				}
 			}
@@ -199,11 +199,8 @@ func HandlePost(c lib.Collection, p Post)  error {
 // }
 
 // "LIKE"
-func HandleLike(col lib.Collection,clu lib.Cluster, post Post) (string, error) {
-
-	record := sdk.NewRecordBuilder(&clu, "numOfLikes", lib.INTEGER)
-
-	sdk.UpdateRecordValue()
+func HandleLike(post string) (string, error) {
+	conn, _ := net.Dial("tcp", "localhost:8080")
 	defer conn.Close()
 	fmt.Fprintf(conn, "LIKE %v\n", post)
 	return bufio.NewReader(conn).ReadString('\n')

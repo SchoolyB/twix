@@ -28,9 +28,6 @@ bin/system/
 
 # Allow specific Go and Odin source files
 !main/main.odin
-# Exclude Go module files if not needed
-go.sum
-go.mod
 
 # System and IDE files
 .DS_Store
